@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Bear & Bee Tracker</title>
+  
+  <!-- Leaflet CSS for Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    body, html {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #map { height: 100%; width: 100%; }
+    .controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 15px;
+      border-radius: 25px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    button {
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      background-color: #007aff;
+      color: white;
+    }
+    .emoji-marker {
+      font-size: 30px;
+      text-align: center;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <div class="controls">
+    <button onclick="updateMyLocation()">📍 Send My Location</button>
+    <button onclick="locatePartner()" style="background-color: #34c759;">🔍 Locate Partner</button>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Firebase App & Database Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <script>
+    // --- 1. FIREBASE CONFIGURATION ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDoGDApc4bm_NGdAH6TmtWrUQ2Y3klb7Kc",
+      authDomain: "bear-and-bee-89b13.firebaseapp.com",
+      databaseURL: "https://bear-and-bee-89b13-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "bear-and-bee-89b13",
+      storageBucket: "bear-and-bee-89b13.appspot.com",
+      messagingSenderId: "322507564866",
+      appId: "1:322507564866:web:2a858364f7898c3f55cadb"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    // --- 2. USER SELECTION ---
+    // Prompts who is opening the web app (saved in browser memory)
+    let userRole = localStorage.getItem('userRole');
+    if (!userRole) {
+      userRole = prompt("Who are you? Type 'bear' or 'bee':").toLowerCase().trim();
+      if (userRole !== 'bear' && userRole !== 'bee') userRole = 'bear';
+      localStorage.setItem('userRole', userRole);
+    }
+
+    const partnerRole = userRole === 'bear' ? 'bee' : 'bear';
+
+    // Custom Map Markers using Emojis
+    const bearIcon = L.divIcon({ className: 'emoji-marker', html: '🐻', iconSize: [35, 35] });
+    const beeIcon = L.divIcon({ className: 'emoji-marker', html: '🐝', iconSize: [35, 35] });
+
+    // Initialize Map centered at default coordinates
+    const map = L.map('map').setView([45.81, 9.08], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let markers = {};
+
+    // Function to place/update markers on the map
+    function setMarker(role, lat, lng) {
+      const icon = role === 'bear' ? bearIcon : beeIcon;
+      if (markers[role]) {
+        markers[role].setLatLng([lat, lng]);
+      } else {
+        markers[role] = L.marker([lat, lng], { icon: icon }).addTo(map);
+      }
+    }
+
+    // --- 3. SEND MY LOCATION TO FIREBASE ---
+    function updateMyLocation() {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          
+          // HTTP POST / PUT equivalent in Firebase SDK
+          database.ref('locations/' + userRole).set({
+            lat: latitude,
+            lng: longitude,
+            timestamp: Date.now()
+          });
+
+          setMarker(userRole, latitude, longitude);
+          map.setView([latitude, longitude], 15);
+          alert("Your location (" + (userRole === 'bear' ? '🐻 Bear' : '🐝 Bee') + ") has been updated!");
+        },
+        (error) => {
+          alert("Unable to retrieve location. Please make sure location permissions are allowed.");
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+
+    // --- 4. GET PARTNER'S LOCATION FROM FIREBASE ---
+    function locatePartner() {
+      database.ref('locations/' + partnerRole).once('value').then((snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          setMarker(partnerRole, data.lat, data.lng);
+          map.setView([data.lat, data.lng], 15);
+        } else {
+          alert("Your partner hasn't shared their location yet!");
+        }
+      });
+    }
+  </script>
+</body>
+</html>
